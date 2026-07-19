@@ -33,6 +33,9 @@ class UsageStore {
     public var expired as Boolean = false;
     //! Seconds since capture, for the "updated" line.
     public var ageS as Number = 0;
+    //! Showing invented figures. Must be surfaced in the UI — a plausible fake
+    //! that reads as real is worse than an obvious error.
+    public var demo as Boolean = false;
     //! Short human-readable failure, or null when the last fetch was fine.
     public var error as String or Null;
 
@@ -54,6 +57,30 @@ class UsageStore {
         if (_pending) {
             return;
         }
+
+        // Demo mode ships enabled so a fresh install shows a working-looking
+        // screen rather than an error. A real watch cannot reach the dev bridge
+        // at all — device HTTPS rules are enforced in firmware and cannot be
+        // relaxed as they can in the simulator, so a privately-signed
+        // certificate is rejected outright. Turn this off in the app settings
+        // once the bridge is reachable over a publicly-trusted certificate.
+        var demoValue = Properties.getValue("DemoMode");
+        demo = !(demoValue instanceof Boolean) || (demoValue as Boolean);
+        if (demo) {
+            fivePct = 55;
+            sevenPct = 12;
+            resetMin = 236;
+            stale = false;
+            expired = false;
+            ageS = 0;
+            error = null;
+            WatchUi.requestUpdate();
+            if (onDone != null) {
+                onDone.invoke(true);
+            }
+            return;
+        }
+
         var url = Properties.getValue("ServerUrl");
         if (!(url instanceof String) || (url as String).length() == 0) {
             setError("no url");

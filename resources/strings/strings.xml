@@ -2,4 +2,5 @@
 <strings>
     <string id="AppName">Claude</string>
     <string id="SettingServerUrl">Bridge URL</string>
+    <string id="SettingDemoMode">Demo data</string>
 </strings>

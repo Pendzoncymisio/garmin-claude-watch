@@ -66,7 +66,12 @@ class UsageView extends WatchUi.View {
         var text = "upd " + _store.ageText();
         var color = Graphics.COLOR_DK_GRAY;
 
-        if (_store.expired) {
+        if (_store.demo) {
+            // Invented figures. Say so plainly — this is the only thing on
+            // screen that distinguishes them from real ones.
+            text = "demo data";
+            color = Graphics.COLOR_YELLOW;
+        } else if (_store.expired) {
             // Strictly more important than staleness: the window rolled over, so
             // the stored percentage is not merely old, it is wrong.
             text = "window reset";

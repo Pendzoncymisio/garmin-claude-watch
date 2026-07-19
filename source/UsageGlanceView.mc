@@ -142,7 +142,13 @@ class UsageGlanceView extends WatchUi.GlanceView {
     }
 
     //! "4h22m" / "48m", or null when there is nothing meaningful to say.
+    //!
+    //! In demo mode this slot says so instead. The figures are invented, and a
+    //! plausible fake presented as real is worse than an obvious error.
     private function resetText() as String or Null {
+        if (_store.demo) {
+            return "demo";
+        }
         var m = _store.resetMin;
         if (m == null || _store.expired || _store.error != null) {
             return null;
