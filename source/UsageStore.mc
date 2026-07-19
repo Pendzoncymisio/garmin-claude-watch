@@ -17,7 +17,6 @@ class UsageStore {
 
     private const KEY_FIVE = "five";
     private const KEY_SEVEN = "seven";
-    private const KEY_CTX = "ctx";
     private const KEY_RESET = "reset";
     private const KEY_STALE = "stale";
     private const KEY_ERR = "err";
@@ -25,11 +24,15 @@ class UsageStore {
     //! Percentages, or null when never fetched.
     public var fivePct as Number or Null;
     public var sevenPct as Number or Null;
-    public var ctxPct as Number or Null;
     //! Minutes until the 5h window resets.
     public var resetMin as Number or Null;
     //! Server judged the capture too old to present as current.
     public var stale as Boolean = false;
+    //! The captured 5h window has since rolled over, so the percentage refers to
+    //! a window that no longer exists.
+    public var expired as Boolean = false;
+    //! Seconds since capture, for the "updated" line.
+    public var ageS as Number = 0;
     //! Short human-readable failure, or null when the last fetch was fine.
     public var error as String or Null;
 
@@ -39,7 +42,6 @@ class UsageStore {
     function initialize() {
         fivePct = Storage.getValue(KEY_FIVE) as Number or Null;
         sevenPct = Storage.getValue(KEY_SEVEN) as Number or Null;
-        ctxPct = Storage.getValue(KEY_CTX) as Number or Null;
         resetMin = Storage.getValue(KEY_RESET) as Number or Null;
         var s = Storage.getValue(KEY_STALE);
         stale = (s instanceof Boolean) ? s : false;
@@ -97,15 +99,17 @@ class UsageStore {
 
         fivePct = numberAt(data, "five_pct");
         sevenPct = numberAt(data, "seven_pct");
-        ctxPct = numberAt(data, "ctx_pct");
         resetMin = numberAt(data, "five_resets_in_min");
         var st = data["stale"];
         stale = (st instanceof Boolean) ? st : false;
+        var ex = data["window_expired"];
+        expired = (ex instanceof Boolean) ? ex : false;
+        var a = numberAt(data, "age_s");
+        ageS = (a == null) ? 0 : a as Number;
         error = null;
 
         Storage.setValue(KEY_FIVE, fivePct);
         Storage.setValue(KEY_SEVEN, sevenPct);
-        Storage.setValue(KEY_CTX, ctxPct);
         Storage.setValue(KEY_RESET, resetMin);
         Storage.setValue(KEY_STALE, stale);
         Storage.setValue(KEY_ERR, null);
@@ -146,13 +150,33 @@ class UsageStore {
     }
 
     //! "44%" or "--" — the glance never has room for more than this.
+    //!
+    //! A rolled-over window reports "--" rather than the stored percentage: once
+    //! the 5h window resets the captured figure describes a window that no
+    //! longer exists, and showing it would overstate usage — the one direction
+    //! that matters, since the point is deciding whether to start working.
     function fiveText() as String {
         if (error != null) {
             return error as String;
         }
-        if (fivePct == null) {
+        if (expired || fivePct == null) {
             return "--";
         }
         return (fivePct as Number).toString() + "%";
+    }
+
+    //! "now" / "12m" / "3h". Deliberately coarse: the exact age never matters,
+    //! only whether these numbers can still be trusted.
+    function ageText() as String {
+        if (error != null) {
+            return "--";
+        }
+        if (ageS < 90) {
+            return "now";
+        }
+        if (ageS < 3600) {
+            return (ageS / 60).toString() + "m";
+        }
+        return (ageS / 3600).toString() + "h";
     }
 }

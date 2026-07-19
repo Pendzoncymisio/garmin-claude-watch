@@ -38,15 +38,43 @@ line itself.
 (atomic rename, best-effort, never breaks the status line). A backup of the
 original is at `statusline-command.sh.bak`.
 
-Consequences worth remembering:
+### There is no way to refresh on demand — this was tested, not assumed
 
-- **The data is only as fresh as the last status-line render.** No session
-  running means no updates. The server reports `age_s` and sets `stale` past
-  15 minutes; the glance appends `?` and the full view says "no live session".
-  Without that the watch would present an hours-old number as current.
-- **5h and 7d are account-wide, context is per-session.** Any session's snapshot
-  is valid for the limits. `ctx` describes whichever session rendered last,
-  which is a genuinely different thing — do not present it as global.
+Claude Code gets these figures from `anthropic-ratelimit-unified-*` response
+headers on its own API calls and forwards them only to the status line.
+
+- `claude -p` (headless) **does not render a status line**, so it cannot be used
+  to force an update. Verified via `session_id` in `usage.json`, which does not
+  change across a headless run. Watching `ts` alone is **not** a valid test: any
+  live interactive session rewrites the file every few seconds, so a `ts` bump
+  looks like success when nothing happened. That mistake was made here first.
+- There is no `claude usage --json` (open request: anthropics/claude-code#40793),
+  no local rate-limit state file, and no `claude usage` subcommand.
+- `/usage` exists but is TUI-only.
+- The Admin usage API covers **API-key billing**, not Pro/Max subscriptions.
+- `ccusage` and similar estimate cost from transcript token counts; they do not
+  read real rate-limit windows.
+
+So tapping re-fetches from the bridge, which picks up a render that happened
+since the view opened. It cannot conjure newer figures, and the app does not
+pretend otherwise.
+
+### Why stale data is still usable
+
+Usage only grows when a session runs — and a session running is exactly what
+refreshes the file. So an old reading is generally still *correct*.
+
+The real failure is the **5h window rolling over** while nobody is looking:
+after that, the stored percentage describes a window that no longer exists and
+overstates usage — the one direction that matters, since the whole point is
+deciding whether there is room to start working. The server compares `resets_at`
+against now and sets `window_expired`; the views then show `--` and "window
+reset" rather than a number that is confidently wrong.
+
+**5h and 7d are account-wide**, so any session's snapshot is valid for both.
+(Context was dropped from the app: it is per-session, describing whichever
+session happened to render last, which is a different quantity and misleading
+next to two account-wide figures.)
 
 ## Server — `server/`
 
@@ -73,10 +101,13 @@ exposed through a public tunnel.
 
 - **Glance**: `5h 45%` at 7.3/59.8 kB. Text overrunning the strip is clipped
   silently — not wrapped, not shrunk.
-- **Full view**: 8.2/763.6 kB. The 5h row is the widest thing drawn. It was
+- **Full view**: 9.1/763.6 kB. The 5h row is the widest thing drawn. It was
   checked at the true worst case (`5h 100% 4h58m`) and fits with **no margin
   left**. Anything added to that row must be re-checked at 100% with a >1h
   reset, or it will clip without any error.
+- Both odd states were verified by serving fixtures through `CLAUDE_USAGE_FILE`
+  rather than waiting for them to occur: expired window renders `5h --` plus
+  "window reset", stale renders "upd 3h - no live session".
 - Colour thresholds: amber ≥70%, red ≥90% — deliberately pessimistic, so the
   glance reads without being read.
 

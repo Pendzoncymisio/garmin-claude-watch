@@ -26,7 +26,8 @@ class ClaudeApp extends Application.AppBase {
     //! (:glance) would "fix" it by charging a full-screen view against 64 KB.
     (:typecheck(false))
     function getInitialView() as [WatchUi.Views] or [WatchUi.Views, WatchUi.InputDelegates] {
-        return [new UsageView(store())];
+        var view = new UsageView(store());
+        return [view, new UsageDelegate(view)];
     }
 
     (:glance)
