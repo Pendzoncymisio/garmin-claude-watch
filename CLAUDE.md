@@ -101,12 +101,19 @@ exposed through a public tunnel.
 
 - **Glance**: the strip is **349 × 130** on this device and `FONT_GLANCE` is
   42px tall — about 13 characters across. Measured, not assumed. 8.0/59.8 kB.
-- **The strip is a rectangle but the display is round.** The 349px width is only
-  really available near the vertical centre; rows above centre are masked
-  narrower. Right-aligning to `w - PAD` on the text row clips, which is how the
-  reset countdown first disappeared. It is now placed by measuring the label
-  with `getTextWidthInPixels` and offsetting from the left, which stays inside
-  the circle. Verified at the worst case (`5h 100%  4h25m`).
+- **The strip is a rectangle but the display is round.** The mask cuts it into a
+  trapezoid: the strip sits *above* screen centre, so the usable left edge moves
+  inward going up — roughly **x=45 at the top, x=30 mid, x=8 near the bottom**,
+  with the right edge mirroring it. Measured by drawing full-width rules at
+  eight heights and reading where each was cut (the capture is worth redoing if
+  the layout changes materially; at 1:1 scale, glance x + 197 = image x).
+  Consequences that already bit:
+  - The title cannot sit as far left as the bottom row, however much one wants
+    it to. It is set as low as the layout allows to narrow the gap.
+  - Right-aligning to `w - PAD` on an upper row clips. The `%` sign vanished
+    this way, leaving `54.`
+  - At 100% the bar's corner gets nipped at full width, hence a larger right
+    inset than left.
 - **The bar is hand-drawn, and has to be.** Connect IQ has no progress-bar
   drawable: `WatchUi.ProgressBar` is a full-screen modal you `pushView`, and the
   only `Drawable` subclasses are `Bitmap`, `Text`, `TextArea` and `Selectable`.
@@ -123,8 +130,13 @@ exposed through a public tunnel.
 - Both odd states were verified by serving fixtures through `CLAUDE_USAGE_FILE`
   rather than waiting for them to occur: expired window renders `5h --` plus
   "window reset", stale renders "upd 3h - no live session".
-- Colour thresholds: amber ≥70%, red ≥90% — deliberately pessimistic, so the
-  glance reads without being read.
+- **One font in the glance** (`FONT_GLANCE`). Mixing sizes is what made an
+  earlier version look assembled rather than designed.
+- Colours: the glance uses **Claude orange `0xD97757`** for the title and bar,
+  white for the figure, grey for the countdown and the bar's remainder. Red at
+  ≥90%. No amber tier in the glance — the base colour is already orange, so a
+  third step reads as noise rather than warning. The full view still uses
+  amber ≥70% / red ≥90%, where white is the base.
 
 ## Steps 2–4 (planned)
 
