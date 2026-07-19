@@ -99,8 +99,23 @@ exposed through a public tunnel.
 
 ## Layout constraints, verified not assumed
 
-- **Glance**: `5h 45%` at 7.3/59.8 kB. Text overrunning the strip is clipped
-  silently — not wrapped, not shrunk.
+- **Glance**: the strip is **349 × 130** on this device and `FONT_GLANCE` is
+  42px tall — about 13 characters across. Measured, not assumed. 8.0/59.8 kB.
+- **The strip is a rectangle but the display is round.** The 349px width is only
+  really available near the vertical centre; rows above centre are masked
+  narrower. Right-aligning to `w - PAD` on the text row clips, which is how the
+  reset countdown first disappeared. It is now placed by measuring the label
+  with `getTextWidthInPixels` and offsetting from the left, which stays inside
+  the circle. Verified at the worst case (`5h 100%  4h25m`).
+- **The bar is hand-drawn, and has to be.** Connect IQ has no progress-bar
+  drawable: `WatchUi.ProgressBar` is a full-screen modal you `pushView`, and the
+  only `Drawable` subclasses are `Bitmap`, `Text`, `TextArea` and `Selectable`.
+  Garmin's own glance bars are firmware-rendered and not exposed, so a
+  third-party glance can never match them exactly — thin, square and flat reads
+  closer to the house style than a thick rounded pill.
+- Content is centred vertically in the strip rather than top-aligned: this
+  glance sits first in the carousel, where top-aligned content reads as
+  floating.
 - **Full view**: 9.1/763.6 kB. The 5h row is the widest thing drawn. It was
   checked at the true worst case (`5h 100% 4h58m`) and fits with **no margin
   left**. Anything added to that row must be re-checked at 100% with a >1h
