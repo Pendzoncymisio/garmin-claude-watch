@@ -1,0 +1,10 @@
+bin/
+server/.venv/
+server/certs/
+__pycache__/
+.pytest_cache/
+developer_key.pem
+developer_key.der
+*.prg
+*.prg.debug.xml
+*.iq

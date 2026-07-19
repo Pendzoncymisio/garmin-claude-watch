@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<settings>
+    <setting propertyKey="@Properties.ServerUrl" title="@Strings.SettingServerUrl">
+        <settingConfig type="alphaNumeric" maxLength="120"/>
+    </setting>
+</settings>

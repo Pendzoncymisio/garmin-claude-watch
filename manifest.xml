@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<!--
+    Separate app id from the weather app — different product, different install.
+    Use a distinct beta id when uploading a beta build so it does not collide
+    with a production install on the watch.
+
+    minApiLevel 5.1.0: Notifications.showNotification() with actions, which the
+    background service needs to offer a one-tap answer, arrived in 5.1.0.
+-->
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
+    <iq:application
+        entry="ClaudeApp"
+        id="f515224958cb465fb79bc2f122f9a079"
+        launcherIcon="@Drawables.LauncherIcon"
+        minApiLevel="5.1.0"
+        name="@Strings.AppName"
+        type="watch-app">
+
+        <!-- One device only. Covers 47mm / 51mm / MicroLED / quatix 8 Pro. -->
+        <iq:products>
+            <iq:product id="fenix8pro47mm"/>
+        </iq:products>
+
+        <iq:permissions>
+            <!-- Polling the local bridge for usage and pending questions. -->
+            <iq:uses-permission id="Communications"/>
+            <!-- Background is deliberately NOT enabled yet. Granting it without
+                 annotating any source (:background) makes the compiler load the
+                 entire app as a background process, which drops the UI classes
+                 out of scope. Add it together with the service in step 3. -->
+        </iq:permissions>
+
+        <iq:languages>
+            <iq:language>eng</iq:language>
+        </iq:languages>
+    </iq:application>
+</iq:manifest>
