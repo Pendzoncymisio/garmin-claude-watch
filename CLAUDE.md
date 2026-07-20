@@ -138,6 +138,27 @@ exposed through a public tunnel.
   third step reads as noise rather than warning. The full view still uses
   amber ≥70% / red ≥90%, where white is the base.
 
+## Installing
+
+`make package` produces `bin/claudeWatch.iq`; upload it at
+apps-developer.garmin.com with **Beta App** ticked, then open the beta URL **on
+the phone** — it hands off to the Connect IQ store app, which installs over
+Bluetooth. The dashboard's install button and Garmin Express do not work for
+this, and beta apps never appear in the IQ app's "my apps" list.
+
+`type="watch-app"` is correct and the glance works. **After install the glance
+appends itself to the end of the glance carousel** — it does not need adding by
+hand, it is just last in the list, below every built-in glance. Do not go
+looking for a bug here: this cost an investigation once already, including a
+`type="widget"` rebuild that was never needed. (fēnix 8 does not list `widget`
+as a supported app type at all — widgets are gone, glances replaced them.)
+
+A real watch **cannot** reach the dev bridge: device HTTPS rules are enforced in
+firmware and reject a privately signed certificate, with no equivalent of the
+simulator's `UseHttpsRequirements=0`. Hence `DemoMode`, which ships enabled.
+Making it show live data needs a publicly trusted certificate — a Cloudflare
+Tunnel to this VM being the intended route.
+
 ## Steps 2–4 (planned)
 
 Chosen approach is **A + C** — they compose, and neither needs a companion phone
