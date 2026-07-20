@@ -4,13 +4,14 @@ import Toybox.WatchUi;
 
 //! The glance: Claude's 5h window as a title, a bar, and the figures.
 //!
-//! Geometry was measured on the device, not assumed. The strip reports 349x130,
-//! but that is a *rectangle* on a *round* display and the mask cuts it into a
-//! trapezoid — it sits above the screen centre, so the usable left edge moves in
-//! as you go up: roughly x=45 at the top, x=30 mid, x=8 near the bottom. That is
-//! why the title cannot sit as far left as the bar however much one would like
-//! it to; it is set as low as the layout allows to minimise the difference.
-//! Text that overruns is clipped silently — not wrapped, not shrunk.
+//! The strip reports 349x130. In the simulator the round mask cuts it into a
+//! trapezoid whose upper rows are narrower, which argued for indenting the
+//! title — but on real hardware it renders fine flush left, and a consistent
+//! left edge is the standard glance look. Everything is at PAD. Trust the
+//! device over the simulator here.
+//!
+//! Text that overruns is still clipped silently — not wrapped, not shrunk — so
+//! the right-hand countdown keeps a larger inset than the left.
 (:glance)
 class UsageGlanceView extends WatchUi.GlanceView {
 
@@ -20,8 +21,6 @@ class UsageGlanceView extends WatchUi.GlanceView {
 
     //! Left inset for the lower rows, where the mask is generous.
     private const PAD = 8;
-    //! Left inset for the title row, forced by the mask rather than chosen.
-    private const PAD_TITLE = 38;
     //! Right inset for the bar. Larger than PAD because the mask nips the
     //! corner at full width — visible only at 100%, which is exactly when the
     //! glance most needs to look deliberate.
@@ -66,7 +65,7 @@ class UsageGlanceView extends WatchUi.GlanceView {
 
         dc.setColor(CLAUDE_ORANGE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(
-            PAD_TITLE, h * 3 / 10,
+            PAD, h * 3 / 10,
             font,
             "Claude",
             Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
