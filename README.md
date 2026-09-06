@@ -104,6 +104,32 @@ uv venv && uv pip install -r requirements.txt
 capture, and the `stale` / `window_expired` flags. `GET /health` is a liveness
 probe. **Nothing here can write into a Claude session, by design.**
 
+### Authentication
+
+Unconfigured, the bridge is open — correct for a LAN-only run against the
+simulator, and wrong the moment it is reachable from the internet. Two
+environment variables turn verification on:
+
+| | |
+|---|---|
+| `CLAUDE_ACCESS_AUD` | The Access application's audience tag. **Setting it enables verification.** |
+| `CLAUDE_ACCESS_CERTS_URL` | Where to fetch the signing keys — Access publishes them at `https://<your-app-hostname>/cdn-cgi/access/certs`, so the team domain is not needed. |
+
+With those set, `GET /usage` requires a valid `Cf-Access-Jwt-Assertion`: the
+**signature is verified** against Access's published keys and the audience tag
+is checked, so a token minted for another application on the same account does
+not work. Checking only that the header exists would be worthless — anything
+that can reach the bridge directly could set it.
+
+`/health` stays unauthenticated deliberately: it reports no usage figures, and a
+probe that needs a credential cannot tell you the credential path is broken. It
+does report whether verification is on, so a deployment that meant to enable it
+can confirm it did.
+
+Neither variable has a default in this repository, and neither should: they name
+a specific deployment. `pytest` covers the whole path offline, minting its own
+key and serving its own JWKS — no network, no real token.
+
 TLS is not optional: Connect IQ rejects plain `http` with
 `SECURE_CONNECTION_REQUIRED` (-1001), in the simulator as well as on the watch.
 `make-dev-certs.sh` mints a throwaway CA plus a server certificate carrying the
@@ -162,17 +188,31 @@ figures, labelled as such in both views — a plausible fake that reads as real 
 worse than an obvious error.
 
 Turning it off needs a publicly trusted certificate in front of the bridge; a
-Cloudflare Tunnel is the intended route. Set `ServerUrl` in the app settings to
-that hostname, no trailing slash — the client appends `/usage`.
+Cloudflare Tunnel is the intended route. In the app settings, set:
+
+- **Bridge URL** — the public hostname, no trailing slash. The client appends
+  `/usage`.
+- **Access client ID** and **Access client secret** — the service token, if the
+  bridge is behind Cloudflare Access. Leave both blank for a bare LAN bridge.
+- **Demo data** — off.
+
+The two credentials are sent as a **single `Authorization` header** carrying both
+as JSON, which is what Access reads when the application sets
+`read_service_tokens_from_header`. One well-known header rather than the usual
+pair of `CF-Access-Client-*` headers is deliberate: custom headers are the least
+reliable part of `makeWebRequest`, so this asks the least of it.
+
+Failures are told apart on the strip, because the fixes differ: `no access`
+(403 — Access refused before the bridge was reached), `bad token` (401 — the
+bridge rejected the assertion), `no data` (404 — bridge up, capture hook never
+ran), `no phone`, `need https`.
 
 ## Status
 
-Usage on the wrist works. Two things are not done:
+Usage on the wrist works, and the bridge can be published safely: both ends now
+carry credentials, and the signature is verified rather than assumed. One thing
+is not done:
 
-- **The bridge has no authentication.** `GET /usage` is open, and
-  `UsageStore.mc` sends no request headers, so it cannot present a Cloudflare
-  Access service token either. Do not expose the bridge publicly until both
-  ends carry credentials.
 - **Answering Claude's questions from the wrist** is designed but unbuilt: a hot
   key for the fast path, plus a background poll raising a notification with the
   options as tappable actions for when the buzz was missed. Background temporal

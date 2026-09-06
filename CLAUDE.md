@@ -109,7 +109,31 @@ testing worst-case layouts without waiting for real numbers to hit 100%.
 **Nothing here can write to the session, by design.** Answer injection is step 4
 and is a different security class: it hands the watch the ability to type into a
 live shell. It must stay LAN-only, token-authenticated, and must never be
-exposed through a public tunnel.
+exposed through a public tunnel — the read-only `/usage` path being public is
+not a precedent for it.
+
+### Access verification — `app/access.py`
+
+`CLAUDE_ACCESS_AUD` switches it on; `CLAUDE_ACCESS_CERTS_URL` says where the
+signing keys are. Neither has a default and neither may gain one: **this repo is
+public**, and both values name a specific deployment. The same applies to the
+`ServerUrl` and `Access*` app settings — they ship empty.
+
+The assertion's **signature and audience are both checked**. Presence alone
+would be worthless: Access strips `CF-Access-Client-Id` before forwarding and
+adds `Cf-Access-Jwt-Assertion` itself, so anything reaching the bridge directly
+could forge the header. The audience check is what stops a token minted for
+another application on the same account from being replayed here; the issuer is
+required to be present but not pinned, because the audience tag is already
+specific to one application of one account.
+
+Failures are separated by cause, because they are fixed differently: a key that
+cannot be fetched is **503**, not 401 — that is this side failing, and calling it
+401 sends the watch chasing a credential problem it does not have.
+
+`tests/test_access.py` runs the whole path offline: it mints an RSA key, serves
+its own JWKS and covers the valid, missing, malformed, wrong-audience and
+expired cases. No network, no real token, so it works in CI and on a plane.
 
 ## Layout constraints, verified not assumed
 
@@ -171,7 +195,20 @@ A real watch **cannot** reach the dev bridge: device HTTPS rules are enforced in
 firmware and reject a privately signed certificate, with no equivalent of the
 simulator's `UseHttpsRequirements=0`. Hence `DemoMode`, which ships enabled.
 Making it show live data needs a publicly trusted certificate — a Cloudflare
-Tunnel to this VM being the intended route.
+Tunnel being the intended route.
+
+For a live install: **Demo data** off, **Bridge URL** set to the public hostname
+without a trailing slash, and the service token in **Access client ID** /
+**Access client secret**. The client sends both in one `Authorization` header as
+JSON rather than the usual `CF-Access-Client-*` pair — one well-known header
+asks less of `makeWebRequest`, whose custom-header handling is the least
+reliable part of Connect IQ networking. If headers turn out to be dropped
+entirely, the two-header form is the fallback to try, not a different protocol.
+
+The client's option dictionary is built as **two literals** rather than one
+mutated after the fact: under `--typecheck 3` the literal's value type is
+inferred from its contents, so adding `:headers` afterwards fights the checker
+for nothing.
 
 ## Steps 2–4 (planned)
 

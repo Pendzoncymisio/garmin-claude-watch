@@ -22,6 +22,10 @@ while nobody is looking — after which the stored percentage describes a window
 that no longer exists. That case is detected and reported separately.
 
 Nothing here can write into a Claude session.
+
+``/usage`` is gated by Cloudflare Access when ``CLAUDE_ACCESS_AUD`` is set — see
+``access.py``. Unset, the bridge is open, which is what a LAN-only run against
+the simulator wants.
 """
 
 from __future__ import annotations
@@ -31,8 +35,10 @@ import os
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
+
+from . import access
 
 USAGE_FILE = Path(os.environ.get("CLAUDE_USAGE_FILE", Path.home() / ".claude" / "usage.json"))
 
@@ -60,8 +66,15 @@ class Usage(BaseModel):
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, object]:
+    """Liveness, plus whether authentication is actually switched on.
+
+    Deliberately unauthenticated: it reports no usage figures, and a probe that
+    needs a credential cannot tell you the credential path is broken. It does
+    say whether verification is enabled, so a deployment that meant to turn it
+    on can confirm it did.
+    """
+    return {"status": "ok", **access.status()}
 
 
 def _read_usage() -> dict:
@@ -107,6 +120,6 @@ def _build_usage() -> Usage:
     )
 
 
-@app.get("/usage", response_model=Usage)
+@app.get("/usage", response_model=Usage, dependencies=[Depends(access.verify)])
 def usage() -> Usage:
     return _build_usage()

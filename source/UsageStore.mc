@@ -88,15 +88,62 @@ class UsageStore {
         }
         _onDone = onDone;
         _pending = true;
-        Communications.makeWebRequest(
-            (url as String) + "/usage",
-            {},
-            {
-                :method => Communications.HTTP_REQUEST_METHOD_GET,
-                :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
-            },
-            method(:onUsage)
-        );
+
+        // Two literal option dictionaries rather than one built by mutation:
+        // under --typecheck 3 the literal's value type is inferred from its
+        // contents, so adding :headers afterwards fights the checker for no gain.
+        var endpoint = (url as String) + "/usage";
+        var headers = authHeaders();
+        if (headers == null) {
+            Communications.makeWebRequest(
+                endpoint,
+                {},
+                {
+                    :method => Communications.HTTP_REQUEST_METHOD_GET,
+                    :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+                },
+                method(:onUsage)
+            );
+        } else {
+            Communications.makeWebRequest(
+                endpoint,
+                {},
+                {
+                    :method => Communications.HTTP_REQUEST_METHOD_GET,
+                    :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON,
+                    :headers => headers
+                },
+                method(:onUsage)
+            );
+        }
+    }
+
+    //! Cloudflare Access service token, or null when the bridge is unprotected.
+    //!
+    //! Both halves go in ONE Authorization header as JSON, rather than the usual
+    //! pair of CF-Access-Client-Id / CF-Access-Client-Secret headers. Access
+    //! reads this form when the application sets read_service_tokens_from_header,
+    //! and asking makeWebRequest for a single well-known header rather than two
+    //! custom ones is the safer bet — custom headers are the least reliable part
+    //! of Connect IQ networking.
+    //!
+    //! Empty settings mean no header at all, which is what a LAN bridge with no
+    //! Access in front of it needs. Credentials live only in the app settings on
+    //! the device; there are no defaults in the source, and there must not be.
+    private function authHeaders() as Dictionary or Null {
+        var id = Properties.getValue("AccessClientId");
+        var secret = Properties.getValue("AccessClientSecret");
+        if (!(id instanceof String) || !(secret instanceof String)) {
+            return null;
+        }
+        if ((id as String).length() == 0 || (secret as String).length() == 0) {
+            return null;
+        }
+        return {
+            "Authorization" =>
+                "{\"cf-access-client-id\":\"" + (id as String) +
+                "\",\"cf-access-client-secret\":\"" + (secret as String) + "\"}"
+        };
     }
 
     function onUsage(code as Number, data as Dictionary or String or Null) as Void {
@@ -109,6 +156,17 @@ class UsageStore {
             var msg = "err " + code.toString();
             if (code == 404) {
                 msg = "no data";
+            } else if (code == 401) {
+                // Reached the bridge, but Access did not vouch for us, or the
+                // bridge rejected the assertion. A credential problem, not a
+                // connectivity one — say so, because the fix is different.
+                msg = "bad token";
+            } else if (code == 403) {
+                // Access itself refused before the bridge was ever reached:
+                // no token sent, or one that is not on this application.
+                msg = "no access";
+            } else if (code == 503) {
+                msg = "srv busy";
             } else if (code == Communications.SECURE_CONNECTION_REQUIRED) {
                 msg = "need https";
             } else if (code == Communications.BLE_CONNECTION_UNAVAILABLE) {

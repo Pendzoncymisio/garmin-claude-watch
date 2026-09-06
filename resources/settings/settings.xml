@@ -6,4 +6,10 @@
     <setting propertyKey="@Properties.ServerUrl" title="@Strings.SettingServerUrl">
         <settingConfig type="alphaNumeric" maxLength="120"/>
     </setting>
+    <setting propertyKey="@Properties.AccessClientId" title="@Strings.SettingAccessId">
+        <settingConfig type="alphaNumeric" maxLength="120"/>
+    </setting>
+    <setting propertyKey="@Properties.AccessClientSecret" title="@Strings.SettingAccessSecret">
+        <settingConfig type="alphaNumeric" maxLength="120"/>
+    </setting>
 </settings>
