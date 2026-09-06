@@ -73,15 +73,23 @@ In `~/.claude/settings.json`:
 {
   "statusLine": {
     "type": "command",
-    "command": "$HOME/.claude/hooks/usage-capture.sh | $HOME/.claude/statusline-command.sh"
+    "command": "$HOME/.claude/hooks/usage-capture.sh | $HOME/.claude/your-status-line.sh"
   }
 }
 ```
 
-If you have no status line of your own, `hooks/statusline-command.sh` is a
-renderer showing model, both windows and context use — copy it alongside and
-point the pipe at it. Capture is best-effort and always exits 0; a broken hook
-can blank the status line but never breaks Claude Code.
+Keep your own renderer on the right of the pipe. If you have none, the hook
+works alone — drop the pipe and the status line simply shows nothing:
+
+```json
+{ "statusLine": { "type": "command", "command": "$HOME/.claude/hooks/usage-capture.sh" } }
+```
+
+**No renderer ships with this repo**, deliberately: a status line is a personal
+preference and the watch app does not depend on one. Only the capture matters.
+
+Capture is best-effort and always exits 0; a broken hook can blank the status
+line but never breaks Claude Code.
 
 `CLAUDE_USAGE_FILE` overrides the output path. The server reads the same
 variable, which is also how the odd states (expired window, stale reading) were

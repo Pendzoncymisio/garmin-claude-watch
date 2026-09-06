@@ -44,13 +44,13 @@ line itself.
 rename, best-effort, always exits 0 so it can never break the status line). It
 is a **pass-through filter** — it echoes stdin onward — so it composes with an
 existing status line rather than replacing it:
-`usage-capture.sh | statusline-command.sh` in `settings.json`. That shape is
-what lets the repo ship the capture without dictating anyone's status line;
-`hooks/statusline-command.sh` is an optional renderer for people who have none.
+`usage-capture.sh | <your renderer>` in `settings.json`. That shape is what lets
+the repo ship the capture without dictating anyone's status line.
 
-On this machine the capture block is still inlined in
-`~/.claude/statusline-command.sh` (original backed up at `.bak`) from before it
-was extracted. Either arrangement works; the repo copy is the canonical one.
+**No renderer is shipped here, and none should be.** One lived in `hooks/` for a
+while and was removed: a status line is a personal preference, nothing in the
+watch app reads it, and shipping one pushes the author's taste onto everyone who
+clones this. The hook alone is the product.
 
 ### There is no way to refresh on demand — this was tested, not assumed
 

@@ -14,7 +14,9 @@
 #
 #   ~/.claude/settings.json
 #   { "statusLine": { "type": "command",
-#                     "command": "$HOME/.claude/hooks/usage-capture.sh | $HOME/.claude/statusline-command.sh" } }
+#                     "command": "$HOME/.claude/hooks/usage-capture.sh | $HOME/.claude/your-status-line.sh" } }
+#
+# The pipe is optional — this script works alone, it just renders nothing.
 #
 # Capture is best-effort and must never break the status line: every failure is
 # swallowed and the exit status is always 0. The write is atomic (temp file plus
