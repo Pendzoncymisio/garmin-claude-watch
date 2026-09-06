@@ -6,16 +6,22 @@ Two jobs, in build order:
 2. **Answer Claude's questions from the wrist** — see the pending question and
    pick an option without walking back to the machine. *Not started.*
 
+`README.md` is the public-facing version of this file: setup, the data flow,
+and why the numbers can only be captured from the status line. This file is the
+working notes — what was measured, what was tried and abandoned. Keep both in
+step when either changes.
+
 Separate app from the ICM weather project in `../garmin-app-first`: different
 product, different app UUID. The two share only the device, the Makefile
 pattern, and the dev-certificate approach.
 
 ## Device, memory, toolchain
 
-Same as the weather app — see `../garmin-app-first/CLAUDE.md`, which is the
-fuller reference for `fenix8pro47mm`, the 64 KB glance budget, the SDK Manager
-`libjpeg.so.8` workaround, and the three simulator gotchas. All of it applies
-here unchanged.
+Same as the weather app. That project's `CLAUDE.md` is the fuller reference for
+`fenix8pro47mm`, the 64 KB glance budget, the SDK Manager `libjpeg.so.8`
+workaround, and the three simulator gotchas — all of it applies here unchanged.
+**It is a separate, private repo**, so a clone of this one will not have it; the
+parts that matter for building are restated in `README.md`.
 
 `minApiLevel` is **5.1.0**, not 3.3.0: `Notifications.showNotification()` with
 actions — which step 3 needs — arrived in 5.1.0.
@@ -34,9 +40,17 @@ figures arrive as stdin JSON to the status line command and are available
 nowhere else — no API, no file, no env var. So the capture point is the status
 line itself.
 
-`~/.claude/statusline-command.sh` writes `~/.claude/usage.json` on every render
-(atomic rename, best-effort, never breaks the status line). A backup of the
-original is at `statusline-command.sh.bak`.
+`hooks/usage-capture.sh` writes `~/.claude/usage.json` on every render (atomic
+rename, best-effort, always exits 0 so it can never break the status line). It
+is a **pass-through filter** — it echoes stdin onward — so it composes with an
+existing status line rather than replacing it:
+`usage-capture.sh | statusline-command.sh` in `settings.json`. That shape is
+what lets the repo ship the capture without dictating anyone's status line;
+`hooks/statusline-command.sh` is an optional renderer for people who have none.
+
+On this machine the capture block is still inlined in
+`~/.claude/statusline-command.sh` (original backed up at `.bak`) from before it
+was extracted. Either arrangement works; the repo copy is the canonical one.
 
 ### There is no way to refresh on demand — this was tested, not assumed
 
