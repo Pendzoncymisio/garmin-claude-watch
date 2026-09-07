@@ -8,3 +8,6 @@ developer_key.der
 *.prg
 *.prg.debug.xml
 *.iq
+
+# Deployment notes for this machine. Never published.
+LOCAL.md

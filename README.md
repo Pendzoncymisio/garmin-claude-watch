@@ -160,7 +160,13 @@ make run       # push the build to it
 ```
 
 `make build` generates `developer_key.der` on first run if absent; it is
-gitignored and must stay that way. `make package` produces `bin/claudeWatch.iq`.
+gitignored and must stay that way — losing it means losing the ability to
+publish updates to an app already in the store under the same identity.
+
+The `id` in `manifest.xml` is **this author's application id**. If you intend to
+publish your own build rather than side-load it, generate a fresh one
+(`uuidgen | tr -d -`) and replace both it and the beta id in the comment;
+otherwise leave it alone.
 
 **The glance budget is 64 KB** and it is the constraint that shapes the code:
 everything reachable from `GlanceView` carries `(:glance)`, because
@@ -209,6 +215,17 @@ as JSON, which is what Access reads when the application sets
 `read_service_tokens_from_header`. One well-known header rather than the usual
 pair of `CF-Access-Client-*` headers is deliberate: custom headers are the least
 reliable part of `makeWebRequest`, so this asks the least of it.
+
+**All three ship empty, and must stay that way.** They are edited per install,
+in Garmin Connect on the phone, and stored on that device — so the repository
+carries no hostname and no credential, and neither does the built `.iq`. This
+app talks to *your* bridge because you told it to, not because an address was
+compiled in. A default here would publish whatever host the committer happens to
+run.
+
+Changing a default in `properties.xml` has **no effect on an install that
+already exists**: the stored value wins until it is cleared. In the simulator
+this reliably looks like the build not taking.
 
 Failures are told apart on the strip, because the fixes differ: `no access`
 (403 — Access refused before the bridge was reached), `bad token` (401 — the
