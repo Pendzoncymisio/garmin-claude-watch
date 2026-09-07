@@ -26,51 +26,104 @@ values name a specific deployment and this repository is public:
 from __future__ import annotations
 
 import os
+import threading
 import time
 
+import httpx
 import jwt
 from fastapi import HTTPException, Request
-from jwt import PyJWKClient
-from jwt.exceptions import PyJWKClientError
+from jwt import PyJWK
 
 AUD = os.environ.get("CLAUDE_ACCESS_AUD") or None
 CERTS_URL = os.environ.get("CLAUDE_ACCESS_CERTS_URL") or None
 
-#: Access rotates signing keys. PyJWKClient caches them and refetches on an
-#: unknown key id, which is exactly the behaviour a rotation needs.
-_jwks: PyJWKClient | None = None
+#: Cloudflare answers `Python-urllib/x.y` with a 403, which is why the keys are
+#: fetched here rather than by PyJWT's built-in PyJWKClient: that client uses
+#: urllib and cannot be given a User-Agent. Any plausible one is accepted.
+_USER_AGENT = "claudeWatch-bridge/1.0"
 
 #: Long enough that a burst of requests does not hammer Cloudflare, short enough
-#: that a revoked key stops working the same day.
-_JWKS_TTL_S = 600
+#: that a rotated key is picked up the same day.
+_TTL_S = 600
+
+#: An unknown key id means either a rotation (refetch, good) or a forged token
+#: (refetching on demand would let anyone drive our request rate). This is the
+#: floor between refetches, so a stream of junk key ids costs one fetch a minute.
+_MIN_REFETCH_S = 60
+
+_lock = threading.Lock()
+_keys: dict[str, PyJWK] = {}
+_fetched_at = 0.0
+
+#: Built once, at import, on the main thread — deliberately not per request.
+#: FastAPI runs sync endpoints in a worker thread, and creating the TLS context
+#: there fails the first time in this environment with a bare
+#: `ssl.SSLError: unknown error (_ssl.c:3036)`, succeeding on every later
+#: attempt. Constructing the client at import moves that work to a place where
+#: it is reliable, and reuses one connection pool besides.
+_client = httpx.Client(timeout=10.0, headers={"User-Agent": _USER_AGENT})
+
+
+class KeyLookupError(RuntimeError):
+    """The signing keys could not be fetched, or the key id is not among them."""
 
 
 def enabled() -> bool:
     return AUD is not None
 
 
-def _client() -> PyJWKClient:
-    global _jwks
-    if _jwks is None:
-        if not CERTS_URL:
-            # Refuse rather than fall back to unauthenticated: a deployment that
-            # sets AUD has asked for verification, and quietly not doing it is
-            # the worst possible outcome.
-            raise HTTPException(
-                status_code=500,
-                detail="CLAUDE_ACCESS_AUD is set but CLAUDE_ACCESS_CERTS_URL is not",
-            )
-        _jwks = PyJWKClient(CERTS_URL, cache_keys=True, lifespan=_JWKS_TTL_S)
-    return _jwks
+def _fetch_jwks() -> dict:
+    """Retrieve the JWKS document. Separated out so tests can replace it."""
+    response = _client.get(CERTS_URL)
+    response.raise_for_status()
+    return response.json()
+
+
+def _refresh() -> None:
+    try:
+        document = _fetch_jwks()
+    except Exception as exc:  # noqa: BLE001 - httpx raises several unrelated types
+        raise KeyLookupError(f"cannot fetch signing keys: {exc}") from exc
+
+    global _keys, _fetched_at
+    _keys = {k["kid"]: PyJWK(k, algorithm="RS256") for k in document.get("keys", []) if "kid" in k}
+    _fetched_at = time.monotonic()
+    if not _keys:
+        raise KeyLookupError("signing key document contained no usable keys")
+
+
+def signing_key(kid: str) -> PyJWK:
+    with _lock:
+        age = time.monotonic() - _fetched_at
+        if not _keys or age > _TTL_S:
+            _refresh()
+        elif kid not in _keys and age > _MIN_REFETCH_S:
+            # Probably a rotation. Rate-limited, so a forged key id cannot be
+            # used to make us fetch on demand.
+            _refresh()
+
+        key = _keys.get(kid)
+        if key is None:
+            raise KeyLookupError(f"no signing key for kid {kid!r}")
+        return key
 
 
 def verify(request: Request) -> None:
-    """Raise 401 unless the request carries a valid Access assertion.
+    """Raise unless the request carries a valid Access assertion.
 
     A no-op when verification is disabled, so the dev path is unchanged.
     """
     if not enabled():
         return
+
+    if not CERTS_URL:
+        # Refuse rather than fall back to unauthenticated: a deployment that
+        # sets AUD has asked for verification, and quietly not doing it is the
+        # worst possible outcome.
+        raise HTTPException(
+            status_code=500,
+            detail="CLAUDE_ACCESS_AUD is set but CLAUDE_ACCESS_CERTS_URL is not",
+        )
 
     token = request.headers.get("cf-access-jwt-assertion")
     if not token:
@@ -80,7 +133,19 @@ def verify(request: Request) -> None:
         raise HTTPException(status_code=401, detail="no Access assertion")
 
     try:
-        key = _client().get_signing_key_from_jwt(token).key
+        header = jwt.get_unverified_header(token)
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail="invalid Access assertion") from exc
+
+    try:
+        key = signing_key(header.get("kid", ""))
+    except KeyLookupError as exc:
+        # This side failing, not the caller presenting something bad. Calling it
+        # 401 would send the watch chasing a credential problem it does not have.
+        print(f"[access] key lookup failed: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail="cannot verify right now") from exc
+
+    try:
         jwt.decode(
             token,
             key,
@@ -91,12 +156,6 @@ def verify(request: Request) -> None:
         # The issuer is required to be present but not pinned to a value: the
         # audience tag is already specific to one application of one account,
         # which is the check that actually matters here.
-    except PyJWKClientError as exc:
-        # The keys could not be fetched or the key id is unknown. That is this
-        # side failing, not the caller presenting something bad, and calling it
-        # 401 would send the watch chasing a credential problem it does not have.
-        print(f"[access] key lookup failed: {exc}", flush=True)
-        raise HTTPException(status_code=503, detail="cannot verify right now") from exc
     except jwt.PyJWTError as exc:
         # Deliberately opaque to the caller — the response should not say which
         # check failed. The reason is logged instead.
