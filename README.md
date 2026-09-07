@@ -164,9 +164,10 @@ gitignored and must stay that way — losing it means losing the ability to
 publish updates to an app already in the store under the same identity.
 
 The `id` in `manifest.xml` is **this author's application id**. If you intend to
-publish your own build rather than side-load it, generate a fresh one
-(`uuidgen | tr -d -`) and replace both it and the beta id in the comment;
-otherwise leave it alone.
+publish your own build rather than side-load it, generate a fresh one with
+`uuidgen | tr -d -` and replace it; otherwise leave it alone. A *second*,
+distinct id is needed only to run a beta alongside an existing store install of
+the same app — not for a beta on its own.
 
 **The glance budget is 64 KB** and it is the constraint that shapes the code:
 everything reachable from `GlanceView` carries `(:glance)`, because
