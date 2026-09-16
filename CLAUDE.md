@@ -90,6 +90,47 @@ reset" rather than a number that is confidently wrong.
 session happened to render last, which is a different quantity and misleading
 next to two account-wide figures.)
 
+### Several machines, one bridge
+
+The limits are per account, so a snapshot from any machine is valid for all of
+them and the freshest is the right one to show. Rather than one bridge per
+machine (the watch takes one URL), the bridge takes pushes: the hook on the
+other machines `PUT`s its `usage.json` to `/usage/<source>`, the bridge keeps
+them in `usage.d/<source>.json`, and `GET /usage` serves the newest `ts`,
+naming it in `source`.
+
+Push, not pull, was the decision, for three reasons that will still hold:
+
+- The hook is the only thing that knows a render just happened; anything
+  polling the other machine would either lag or hammer it.
+- The bridge already listens on the LAN; the other direction (bridge reaching
+  into each machine) needs an inbound path on every one of them.
+- A push is one `curl` with nothing to install.
+
+Shape of the hook's push, and why:
+
+- **Detached, 3 s timeout, `exit 0`.** The status line must never wait on the
+  network; a bridge that is down costs a render nothing (measured ~15 ms
+  either way).
+- **Throttled on the figures, not the timestamp.** Pushed when `{model,
+  five_hour, seven_day}` differs from the last push, otherwise every
+  `CLAUDE_USAGE_PUSH_EVERY_S` (120 s) as a heartbeat so the `ts` on the bridge —
+  hence `age_s` on the watch — keeps moving while a session sits flat.
+- **The token goes in a header read from a process substitution**, so it never
+  appears on a command line where `ps` shows it.
+- **`push.env` is read, not sourced.** Nothing in it executes, and a value with
+  a space or an `=` survives. Plain `KEY=VALUE` lines; quotes are stripped if
+  present.
+- The pushed copy is validated by the bridge and reduced to the account-wide
+  fields — `session_id` and `cwd` stay on the machine that produced them.
+
+The bridge side (`main.py`): route absent (404) until `CLAUDE_USAGE_PUSH_TOKEN`
+is set; peer-network check (`CLAUDE_USAGE_PUSH_FROM`) before the token check so
+an outsider cannot probe for the secret; `hmac.compare_digest`; source name
+confined to `[a-z0-9_-]{1,32}` and never `local`; 4 KB body cap; a `ts` more
+than a minute ahead of our clock is clamped so a fast clock cannot win forever.
+`tests/test_push.py` covers all of it offline.
+
 ## Server — `server/`
 
 FastAPI, read-only, `uv` only (never `python3 -m venv`; `python3-venv` is not
@@ -105,6 +146,8 @@ uv venv && uv pip install -r requirements.txt
 
 `CLAUDE_USAGE_FILE` overrides the input path — used to serve a fixture when
 testing worst-case layouts without waiting for real numbers to hit 100%.
+Pushed snapshots from other machines live next to it in `usage.d/`
+(`CLAUDE_USAGE_DIR`); the newest of all of them is what gets served.
 
 **Nothing here can write to the session, by design.** Answer injection is step 4
 and is a different security class: it hands the watch the ability to type into a

@@ -20,7 +20,9 @@ on stdin. So the status line is the capture point.
 ```
 Claude Code ──stdin JSON──▶ hooks/usage-capture.sh ──▶ ~/.claude/usage.json
                                                               │
-                                            server/ (FastAPI, read-only)
+Claude Code on another machine ──▶ usage-capture.sh ──PUT──▶ ~/.claude/usage.d/<source>.json
+                                                              │
+                                    server/ (FastAPI; the freshest snapshot wins)
                                                               │
                                                      GET /usage over HTTPS
                                                               │
@@ -95,6 +97,29 @@ line but never breaks Claude Code.
 variable, which is also how the odd states (expired window, stale reading) were
 tested — by serving a fixture rather than waiting for real numbers to hit 100%.
 
+### More than one machine
+
+The limits are per account, not per machine, so one bridge can serve every box
+you run Claude Code on: the hook on each of the others pushes its snapshot to
+the bridge, and `GET /usage` answers with whichever capture is newest. Install
+the hook there exactly as above, then add — mode 600, it holds a secret:
+
+```sh
+# ~/.config/claude-watch/push.env  (plain KEY=VALUE lines; the file is read, not sourced)
+CLAUDE_USAGE_PUSH_URL=http://bridge-host:8444
+CLAUDE_USAGE_PUSH_TOKEN=<the bridge's CLAUDE_USAGE_PUSH_TOKEN>
+CLAUDE_USAGE_SOURCE=laptop          # optional; the hostname otherwise
+```
+
+Each render then does a `PUT <URL>/usage/<source>` in the background with a
+3-second timeout — the status line never waits on the network, and a bridge
+that is down costs nothing. Pushes happen when the figures change and otherwise
+every `CLAUDE_USAGE_PUSH_EVERY_S` seconds (default 120), so the age shown on
+the watch stays honest while a session sits at the same percentage. The pushed
+copy carries only the account-wide figures; the session id and working
+directory that the hook records locally are not sent, and the bridge would
+drop them if they were.
+
 ## 2. Run the bridge
 
 FastAPI, read-only, one endpoint. **`uv` only** — this was developed on a Debian
@@ -137,6 +162,24 @@ can confirm it did.
 Neither variable has a default in this repository, and neither should: they name
 a specific deployment. `pytest` covers the whole path offline, minting its own
 key and serving its own JWKS — no network, no real token.
+
+### Accepting pushes from other machines
+
+`PUT /usage/{source}` does not exist until it is switched on, and it is the only
+thing the bridge ever writes:
+
+| | |
+|---|---|
+| `CLAUDE_USAGE_PUSH_TOKEN` | Shared secret the pushing hooks present as a bearer token. **Setting it enables the route.** `openssl rand -hex 32` is a fine value. |
+| `CLAUDE_USAGE_PUSH_FROM` | Comma-separated networks a push may come from, e.g. `192.168.1.21/32`. Empty accepts any peer that knows the token — fine on a closed LAN, not once the bridge is reachable from further away. |
+| `CLAUDE_USAGE_DIR` | Where pushed snapshots land, one `<source>.json` each. Defaults to `usage.d/` next to `CLAUDE_USAGE_FILE`. |
+
+The network check runs before the token check, so an address outside the list
+gets a `403` whatever it presents and cannot probe for the secret. A snapshot is
+validated and reduced to the fields the watch needs before it is stored, a
+source name is confined to a plain filename, and a sender whose clock runs
+ahead is clamped rather than allowed to win every comparison. `/health`
+reports `push: on` once the token is set.
 
 TLS is not optional: Connect IQ rejects plain `http` with
 `SECURE_CONNECTION_REQUIRED` (-1001), in the simulator as well as on the watch.
